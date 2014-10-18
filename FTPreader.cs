@@ -36,17 +36,21 @@ public class TFTPreader()
 			requestPacket[fileBytes.Length + 3 + i] = modeBytes[i];
 		requestPacket[requestPacket.Length - 1] = (byte)0;
 
+		IPEndPoint srcPoint;
 		IPEndPoint endPoint = new IPEndPoint(Dns.GetHostEntry(host).AddressList[0], 69);
 
 		UdpClient client = new UdpClient();
 		
-		int sendPort = ((IPEndPoint)client.Client.LocalEndPoint).Port;
-		
-		Console.WriteLine(sendPort);
-
 		client.Send(requestPacket, requestPacket.Length, endPoint);
+		
+		int sendPort = ((IPEndPoint)client.Client.LocalEndPoint).Port;
+		string sendIP = ((IPEndPoint)client.Client.LocalEndPoint).Address.ToString();
 
-		byte[] returnBytes = client.Receive(ref endPoint);
+		Console.WriteLine(sendPort + " " + sendIP);
+
+		srcPoint = new IPEndPoint(IPAddress.Any, sendPort);
+
+		byte[] returnBytes = client.Receive(ref srcPoint);
 
 		client.Close();
 	
