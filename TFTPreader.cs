@@ -8,6 +8,7 @@ using System.Collections.Generic;
 public class TFTPreader()
 {
 	private const int TFTP_Port = 69;
+	private const int fullBlock = 516;
 
 	private string mode;
 	private string host;
@@ -58,9 +59,38 @@ public class TFTPreader()
 		};
 	}
 
-	public void retreiveFile()
+	public void retreiveFile(byte[] block)
 	{
+		FileStream fileStream = new FileStream(Directory.GetCurrentDirectory() + "/" + requestFile, FileMode.Create, FileAccess.ReadWrite);
+		Stream fileWriter = fileStream;
 		
+		int blockNum = 1;
+		
+		do
+		{
+			fileWriter.Write(block, 4, block.Length);
+			blockNum += 1;
+			block = sendAck(blockNum);
+		}
+		while(block.Length == fullBlock);
+		
+		fileWriter.Write(block, 4, block.Length);
+		
+		Console.WriteLine("File :" + requestFile + " successfully downloaded");
+	}
+
+	public byte[] sendAck(int blockNum)
+	{
+		byte[] packet = new byte[4];
+		packet[0] = 0;
+		packet[1] = opCodes["ack"];
+		
+		//gonna have to split blockNum if over 8 bytes long
+
+		packet[2] = 0;
+		packet[3] = (byte)blockNum;
+
+		return packet;
 	}
 
 	public void sendRequest()
@@ -79,21 +109,19 @@ public class TFTPreader()
 		requestPacket[requestPacket.Length - 1] = 0;
 
 		IPEndPoint destination = new IPEndPoint(hostIP, TFTP_Port);
-		if(sendReceivePacket(requestPacket, destination) != null)
+		byte[] firstBlock = sendReceivePacket(requestPacket, destination);
+		if(firstBlock != null)
 		{
-			retreiveFile();
+			retreiveFile(firstBlock);
 		}
-		else
-		{
-			closeClient();
-		}
+	
+		closeClient();
 	}
 
 	public byte[] sendReceivePacket(byte[] packet, IPEndPoint destination)
 	{
 		client.Send(packet, packet.Length, destination);
 		int port = destination.Port;
-		Console.WriteLine(port);
 		receiveLoc = new IPEndPoint(hostIP, port);
 		byte[] receivePacket = client.Receive(ref receiveLoc);
 		if(!checkError(receivePacket))
@@ -106,8 +134,10 @@ public class TFTPreader()
 		if(packet[1] == opCodes["error"])
 		{
 			byte[] error = new byte[packet.Length - 5];
-			for(int i = 2; i < (packet.Length-1); i++)
-				error[i-2] = packet[i];
+			for(int i = 4; i < (packet.Length - 1); i++)
+			{
+				error[i-4] = packet[i];
+			}
 			Console.WriteLine("Error code " + packet[0] + packet[1] + ": " + Encoding.ASCII.GetString(error));
 			return false;
 		}
