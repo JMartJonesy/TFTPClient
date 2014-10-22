@@ -7,10 +7,48 @@ using System.Collections.Generic;
 
 public class TFTPreader()
 {
+	private const int TFTP_Port = 69;
 
-	static public void Main(string[] args)
+	private string mode;
+	private string host;
+	private string requestFile;
+
+	private IPAddress hostIP;
+
+	private UdpClient client;
+
+	private IPEndPoint receiveLoc;
+
+	private Dictionary<string, byte> opCodes;
+
+	public TFTPreader(string mode, string host, string fileName)
+		:this()
 	{
-		Dictionary<string, int> opCodes = new Dictionary<string, int>()
+		this.mode = mode;
+		this.host = host;
+		this.requestFile = fileName;
+		hostIP = null;
+		client = new UdpClient();
+		receiveLoc = null;
+		testHostName();
+		fillDictionary();
+	}
+
+	public bool testHostName()
+	{
+		IPAddress[] addresses = Dns.GetHostEntry(host).AddressList;
+		if(addresses.Length == 0)
+		{
+			Console.WriteLine("Host :" + host + " not found");
+			return false;
+		}
+		hostIP = addresses[0];
+		return true;
+	}
+
+	public void fillDictionary()
+	{
+		opCodes = new Dictionary<string, byte>()
 		{
 			{"read", 1},
 			{"write", 2},
@@ -18,42 +56,77 @@ public class TFTPreader()
 			{"ack", 4},
 			{"error", 5}
 		};
+	}
+
+	public void retreiveFile()
+	{
 		
-		string mode = args[0];
-		string host = args[1];
-		string file = args[2];
+	}
 
+	public void sendRequest()
+	{
 		byte[] modeBytes = Encoding.ASCII.GetBytes(mode);
-		byte[] fileBytes = Encoding.ASCII.GetBytes(file);
-		byte[] requestPacket = new byte[2 + fileBytes.Length + 1 + modeBytes.Length + 1];
+		byte[] fileBytes = Encoding.ASCII.GetBytes(requestFile);
+		byte[] requestPacket = new byte[4 + fileBytes.Length  + modeBytes.Length];
 
-		requestPacket[0] = (byte)0;
-		requestPacket[1] = (byte)opCodes["read"];
+		requestPacket[0] = 0;
+		requestPacket[1] = opCodes["read"];
 		for( int i = 0; i < fileBytes.Length; i++ )
 			requestPacket[i + 2] = fileBytes[i];
-		requestPacket[fileBytes.Length + 2] = (byte)0;
+		requestPacket[fileBytes.Length + 2] = 0;
 		for( int i = 0; i < modeBytes.Length; i++ )
 			requestPacket[fileBytes.Length + 3 + i] = modeBytes[i];
-		requestPacket[requestPacket.Length - 1] = (byte)0;
+		requestPacket[requestPacket.Length - 1] = 0;
 
-		IPEndPoint srcPoint;
-		IPEndPoint endPoint = new IPEndPoint(Dns.GetHostEntry(host).AddressList[0], 69);
+		IPEndPoint destination = new IPEndPoint(hostIP, TFTP_Port);
+		if(sendReceivePacket(requestPacket, destination) != null)
+		{
+			retreiveFile();
+		}
+		else
+		{
+			closeClient();
+		}
+	}
 
-		UdpClient client = new UdpClient();
-		
-		client.Send(requestPacket, requestPacket.Length, endPoint);
-		
-		int sendPort = ((IPEndPoint)client.Client.LocalEndPoint).Port;
-		string sendIP = ((IPEndPoint)client.Client.LocalEndPoint).Address.ToString();
+	public byte[] sendReceivePacket(byte[] packet, IPEndPoint destination)
+	{
+		client.Send(packet, packet.Length, destination);
+		int port = destination.Port;
+		Console.WriteLine(port);
+		receiveLoc = new IPEndPoint(hostIP, port);
+		byte[] receivePacket = client.Receive(ref receiveLoc);
+		if(!checkError(receivePacket))
+			return null;
+		return receivePacket;
+	}
 
-		Console.WriteLine(sendPort + " " + sendIP);
+	public bool checkError(byte[] packet)
+	{
+		if(packet[1] == opCodes["error"])
+		{
+			byte[] error = new byte[packet.Length - 5];
+			for(int i = 2; i < (packet.Length-1); i++)
+				error[i-2] = packet[i];
+			Console.WriteLine("Error code " + packet[0] + packet[1] + ": " + Encoding.ASCII.GetString(error));
+			return false;
+		}
+		return true;
+	}
 
-		srcPoint = new IPEndPoint(IPAddress.Any, sendPort);
-
-		byte[] returnBytes = client.Receive(ref srcPoint);
-
+	public void closeClient()
+	{
 		client.Close();
-	
-		Console.WriteLine(returnBytes[1]);
+	}
+
+	static public void Main(string[] args)
+	{
+		if(args.Length == 3)
+		{
+			TFTPreader tftp = new TFTPreader(args[0], args[1], args[2]);
+			tftp.sendRequest();
+		}
+		else
+			Console.WriteLine("usage");
 	}
 }
