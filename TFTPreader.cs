@@ -141,8 +141,11 @@ public class TFTPreader()
 	/// </summary>
 	///
 	/// <param name = "blockNum"> the block number to ACK </param>
+	/// <param name = "finished"> true if ACK is for last block false
+	///			      otherwise </param>
 	///
 	/// <return> a byte array of the next received block from the server
+	/// </return>
 	public byte[] sendAck(int blockNum, bool finished)
 	{
 		byte[] packet = new byte[4];
@@ -157,6 +160,10 @@ public class TFTPreader()
 		return sendReceivePacket(packet, receiveLoc, finished);
 	}
 
+	/// <summary>
+	/// sendRequest - creates a request packet and starts retreiving a file
+	///	          if no error occurs
+	/// </summary>
 	public void sendRequest()
 	{
 		byte[] modeBytes = Encoding.ASCII.GetBytes(mode);
@@ -182,6 +189,19 @@ public class TFTPreader()
 		closeClient();
 	}
 
+	/// <summary>
+	/// sendReceivePacket - send a packet to the server and receives a 
+	///			packet if finished is false
+	/// </summary>
+	///
+	/// <param name = "packet"> packet to send </param>
+	/// <param name = "desination"> IPEndPoint of where to send to </param>
+	/// <param name = "finished"> true if done receiving packets false
+	///			      otherwise </param>
+	///
+	/// <return> next packet received or null if error was received or
+	///          finished is true
+	/// </return>
 	public byte[] sendReceivePacket(byte[] packet, IPEndPoint destination, bool finished)
 	{
 		client.Send(packet, packet.Length, destination);
@@ -198,6 +218,14 @@ public class TFTPreader()
 		return receivePacket;
 	}
 
+	/// <summary>
+	/// checkError - checks to see if packet received was an error packet
+	/// </summary>
+	///
+	/// <param name = "packet"> last packet received </param>
+	/// 
+	/// <return> true if packet wasnt an error packet, false othehrwise
+	/// </return>
 	public bool checkError(byte[] packet)
 	{
 		if(packet[1] == opCodes["error"])
@@ -213,11 +241,18 @@ public class TFTPreader()
 		return true;
 	}
 
+	/// <summary>
+	/// closeClient - closes UdpClient used to send and received packets
+	/// </summary>
 	public void closeClient()
 	{
 		client.Close();
 	}
 
+	/// <summary>
+	/// Main - rusn a simple TFTPreader with mode, host and file given as
+	///	   command line arguments
+	/// </summary>
 	static public void Main(string[] args)
 	{
 		if(args.Length == 3)
