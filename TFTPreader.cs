@@ -1,3 +1,11 @@
+/*
+ *
+ * Data Comm Project II
+ * TFTP Reader
+ * Jesse martinez (jem4687)
+ *
+*/
+
 using System;
 using System.IO;
 using System.Net;
@@ -5,8 +13,15 @@ using System.Text;
 using System.Net.Sockets;
 using System.Collections.Generic;
 
+/// <summary>
+/// This class contains all the methods neede to read a file from a TFTP server
+/// </summary>
 public class TFTPreader()
 {
+        //////////////////////////////////////////////////////
+	//	Class Variables
+	//////////////////////////////////////////////////////
+
 	private const int TFTP_Port = 69;
 	private const int fullBlock = 516;
 
@@ -22,6 +37,15 @@ public class TFTPreader()
 
 	private Dictionary<string, byte> opCodes;
 
+	/// <summary>
+	/// Non-Default Constructor
+	///
+	/// Constructor intitializes all variables with given parameters
+	/// </summary>
+	///
+	/// <param name = "mode"> netascii or octet mode </param>
+	/// <param name = "host"> the host name of the TFTP server </param>
+	/// <param name = "fileName"> file to retrieve from server </param>
 	public TFTPreader(string mode, string host, string fileName)
 		:this()
 	{
@@ -35,6 +59,11 @@ public class TFTPreader()
 		fillDictionary();
 	}
 
+	/// <summary>
+	/// testHostName - attempts to find the IP Address of TFTP server
+	/// </summary>
+	///
+	/// <return> true if IP Adress was found false otherwise </return>
 	public bool testHostName()
 	{
 		IPAddress[] addresses = Dns.GetHostEntry(host).AddressList;
@@ -47,6 +76,10 @@ public class TFTPreader()
 		return true;
 	}
 
+	/// <summary>
+	/// fillDictionary - initializes the opCodes dictionary with the 
+	///                  standard TFTP opCodes
+	/// </summary>
 	public void fillDictionary()
 	{
 		opCodes = new Dictionary<string, byte>()
@@ -59,6 +92,14 @@ public class TFTPreader()
 		};
 	}
 
+	/// <summary>
+	/// retrieveFile - retrieves a file from the TFTP server sending ACK 
+	///                after each block is received and resending ACKs
+	///		   if necessary, if error occurs stop retreiving blocks
+	/// </summary>
+	///
+	/// <param name = "block"> first block of data retrieved from the 
+	///			   server </param>
 	public void retrieveFile(byte[] block)
 	{
 		FileStream fileStream = new FileStream(Directory.GetCurrentDirectory() + "/" + requestFile, FileMode.Create, FileAccess.ReadWrite);
@@ -71,23 +112,22 @@ public class TFTPreader()
 		{
 			//Console.WriteLine(blockNum);
 			//Console.WriteLine(block.Length);
-			if(block[3] == blockNum && block[1] == opCodes["data"])
+			if((int)block[3] == blockNum && block[1] == opCodes["data"])
 			{
 				fileStream.Write(block, 4, block.Length - 4);
-
-				if(block.Length == fullBlock)
-					block = sendAck(blockNum);
+				block = sendAck(blockNum, false);
 				blockNum += 1;
 			}
 			else
 			{
-				block = sendAck(blockNum - 1);
+				block = sendAck(blockNum - 1, false);
 			}
 		}
 		while(block != null && block.Length == fullBlock);
 		
 		if(block != null)
 		{
+			sendAck(blockNum, true);
 			fileStream.Write(block, 4, block.Length - 4);
 			Console.WriteLine("File :" + requestFile + " successfully downloaded");
 		}
@@ -95,7 +135,15 @@ public class TFTPreader()
 		fileStream.Close();
 	}
 
-	public byte[] sendAck(int blockNum)
+	/// <summary>
+	/// sendAck - send an ACK packet to the server with the given block
+	///	      number
+	/// </summary>
+	///
+	/// <param name = "blockNum"> the block number to ACK </param>
+	///
+	/// <return> a byte array of the next received block from the server
+	public byte[] sendAck(int blockNum, bool finished)
 	{
 		byte[] packet = new byte[4];
 		packet[0] = 0;
@@ -106,7 +154,7 @@ public class TFTPreader()
 		packet[2] = 0;
 		packet[3] = (byte)blockNum;
 
-		return sendReceivePacket(packet, receiveLoc);;
+		return sendReceivePacket(packet, receiveLoc, finished);
 	}
 
 	public void sendRequest()
@@ -125,7 +173,7 @@ public class TFTPreader()
 		requestPacket[requestPacket.Length - 1] = 0;
 
 		IPEndPoint destination = new IPEndPoint(hostIP, TFTP_Port);
-		byte[] firstBlock = sendReceivePacket(requestPacket, destination);
+		byte[] firstBlock = sendReceivePacket(requestPacket, destination, false);
 		if(firstBlock != null)
 		{
 			retrieveFile(firstBlock);
@@ -134,12 +182,17 @@ public class TFTPreader()
 		closeClient();
 	}
 
-	public byte[] sendReceivePacket(byte[] packet, IPEndPoint destination)
+	public byte[] sendReceivePacket(byte[] packet, IPEndPoint destination, bool finished)
 	{
 		client.Send(packet, packet.Length, destination);
 		int port = destination.Port;
 		receiveLoc = new IPEndPoint(hostIP, port);
+		
+		if(finished)
+			return null;
+
 		byte[] receivePacket = client.Receive(ref receiveLoc);
+		
 		if(!checkError(receivePacket))
 			return null;
 		return receivePacket;
