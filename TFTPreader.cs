@@ -59,24 +59,40 @@ public class TFTPreader()
 		};
 	}
 
-	public void retreiveFile(byte[] block)
+	public void retrieveFile(byte[] block)
 	{
 		FileStream fileStream = new FileStream(Directory.GetCurrentDirectory() + "/" + requestFile, FileMode.Create, FileAccess.ReadWrite);
-		Stream fileWriter = fileStream;
 		
 		int blockNum = 1;
+
+		//Console.WriteLine(block[3]);
 		
 		do
 		{
-			fileWriter.Write(block, 4, block.Length);
-			blockNum += 1;
-			block = sendAck(blockNum);
+			//Console.WriteLine(blockNum);
+			//Console.WriteLine(block.Length);
+			if(block[3] == blockNum && block[1] == opCodes["data"])
+			{
+				fileStream.Write(block, 4, block.Length - 4);
+
+				if(block.Length == fullBlock)
+					block = sendAck(blockNum);
+				blockNum += 1;
+			}
+			else
+			{
+				block = sendAck(blockNum - 1);
+			}
 		}
-		while(block.Length == fullBlock);
+		while(block != null && block.Length == fullBlock);
 		
-		fileWriter.Write(block, 4, block.Length);
+		if(block != null)
+		{
+			fileStream.Write(block, 4, block.Length - 4);
+			Console.WriteLine("File :" + requestFile + " successfully downloaded");
+		}
 		
-		Console.WriteLine("File :" + requestFile + " successfully downloaded");
+		fileStream.Close();
 	}
 
 	public byte[] sendAck(int blockNum)
@@ -90,7 +106,7 @@ public class TFTPreader()
 		packet[2] = 0;
 		packet[3] = (byte)blockNum;
 
-		return packet;
+		return sendReceivePacket(packet, receiveLoc);;
 	}
 
 	public void sendRequest()
@@ -112,7 +128,7 @@ public class TFTPreader()
 		byte[] firstBlock = sendReceivePacket(requestPacket, destination);
 		if(firstBlock != null)
 		{
-			retreiveFile(firstBlock);
+			retrieveFile(firstBlock);
 		}
 	
 		closeClient();
@@ -157,6 +173,6 @@ public class TFTPreader()
 			tftp.sendRequest();
 		}
 		else
-			Console.WriteLine("usage");
+			Console.WriteLine("Usage: [mono] TFTPreader.exe [netascii|octet] tftp−host file");
 	}
 }
