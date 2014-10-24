@@ -107,15 +107,18 @@ public class TFTPreader()
 		int blockNum = 1;
 
 		//Console.WriteLine(block[3]);
-		
+	
 		do
 		{
 			//Console.WriteLine(blockNum);
 			//Console.WriteLine(block.Length);
-			if((int)block[3] == blockNum && block[1] == opCodes["data"])
+			int blockReceived = (256 * (int)block[2]) + (int)block[3];
+			if(blockReceived == blockNum && block[1] == opCodes["data"])
 			{
 				fileStream.Write(block, 4, block.Length - 4);
 				block = sendAck(blockNum, false);
+				if((int)block[2] == 255 && (int)block[3] == 255)
+					blockNum = 0;
 				blockNum += 1;
 			}
 			else
@@ -152,10 +155,12 @@ public class TFTPreader()
 		packet[0] = 0;
 		packet[1] = opCodes["ack"];
 		
-		//gonna have to split blockNum if over 8 bytes long
-
-		packet[2] = 0;
-		packet[3] = (byte)blockNum;
+		byte[] intBytes = BitConverter.GetBytes(blockNum);
+		
+		//Console.WriteLine(intBytes[0] + " , " + intBytes[1] + " , " + intBytes[2] + " , " + intBytes[3]);
+		
+		packet[2] = intBytes[1];
+		packet[3] = intBytes[0];
 
 		return sendReceivePacket(packet, receiveLoc, finished);
 	}
