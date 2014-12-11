@@ -16,7 +16,7 @@ using System.Collections.Generic;
 /// <summary>
 /// This class contains all the methods neede to read a file from a TFTP server
 /// </summary>
-public class TFTPreader()
+public class TFTPreader
 {
         //////////////////////////////////////////////////////
 	//	Class Variables
@@ -47,7 +47,6 @@ public class TFTPreader()
 	/// <param name = "host"> the host name of the TFTP server </param>
 	/// <param name = "fileName"> file to retrieve from server </param>
 	public TFTPreader(string mode, string host, string fileName)
-		:this()
 	{
 		this.mode = mode;
 		this.host = host;
@@ -64,16 +63,18 @@ public class TFTPreader()
 	/// </summary>
 	///
 	/// <return> true if IP Adress was found false otherwise </return>
-	public bool testHostName()
+	public void testHostName()
 	{
-		IPAddress[] addresses = Dns.GetHostEntry(host).AddressList;
-		if(addresses.Length == 0)
+		try
 		{
-			Console.WriteLine("Host :" + host + " not found");
-			return false;
+			IPAddress[] addresses = Dns.GetHostEntry(host).AddressList;
+			hostIP = addresses[0];
 		}
-		hostIP = addresses[0];
-		return true;
+		catch(Exception e)
+		{
+			Console.WriteLine("Host: " + host + " not found");
+			hostIP = null;
+		}
 	}
 
 	/// <summary>
@@ -132,7 +133,7 @@ public class TFTPreader()
 		{
 			sendAck(blockNum, true);
 			fileStream.Write(block, 4, block.Length - 4);
-			Console.WriteLine("File :" + requestFile + " successfully downloaded");
+			Console.WriteLine("File: " + requestFile + " successfully downloaded");
 		}
 		
 		fileStream.Close();
@@ -171,26 +172,28 @@ public class TFTPreader()
 	/// </summary>
 	public void sendRequest()
 	{
-		byte[] modeBytes = Encoding.ASCII.GetBytes(mode);
-		byte[] fileBytes = Encoding.ASCII.GetBytes(requestFile);
-		byte[] requestPacket = new byte[4 + fileBytes.Length  + modeBytes.Length];
-
-		requestPacket[0] = 0;
-		requestPacket[1] = opCodes["read"];
-		for( int i = 0; i < fileBytes.Length; i++ )
-			requestPacket[i + 2] = fileBytes[i];
-		requestPacket[fileBytes.Length + 2] = 0;
-		for( int i = 0; i < modeBytes.Length; i++ )
-			requestPacket[fileBytes.Length + 3 + i] = modeBytes[i];
-		requestPacket[requestPacket.Length - 1] = 0;
-
-		IPEndPoint destination = new IPEndPoint(hostIP, TFTP_Port);
-		byte[] firstBlock = sendReceivePacket(requestPacket, destination, false);
-		if(firstBlock != null)
+		if(hostIP != null)
 		{
-			retrieveFile(firstBlock);
-		}
+			byte[] modeBytes = Encoding.ASCII.GetBytes(mode);
+			byte[] fileBytes = Encoding.ASCII.GetBytes(requestFile);
+			byte[] requestPacket = new byte[4 + fileBytes.Length  + modeBytes.Length];
+
+			requestPacket[0] = 0;
+			requestPacket[1] = opCodes["read"];
+			for( int i = 0; i < fileBytes.Length; i++ )
+				requestPacket[i + 2] = fileBytes[i];
+			requestPacket[fileBytes.Length + 2] = 0;
+			for( int i = 0; i < modeBytes.Length; i++ )
+				requestPacket[fileBytes.Length + 3 + i] = modeBytes[i];
+			requestPacket[requestPacket.Length - 1] = 0;
 	
+			IPEndPoint destination = new IPEndPoint(hostIP, TFTP_Port);
+			byte[] firstBlock = sendReceivePacket(requestPacket, destination, false);
+			if(firstBlock != null)
+			{
+				retrieveFile(firstBlock);
+			}
+		}	
 		closeClient();
 	}
 
@@ -209,17 +212,29 @@ public class TFTPreader()
 	/// </return>
 	public byte[] sendReceivePacket(byte[] packet, IPEndPoint destination, bool finished)
 	{
-		client.Send(packet, packet.Length, destination);
-		int port = destination.Port;
-		receiveLoc = new IPEndPoint(hostIP, port);
-		
-		if(finished)
-			return null;
+		byte[] receivePacket = null;
+		while(receivePacket == null)
+		{
+			try
+			{
+				client.Send(packet, packet.Length, destination);
+				//int port = destination.Port;
+				receiveLoc = destination;
+				//new IPEndPoint(hostIP, port);
 
-		byte[] receivePacket = client.Receive(ref receiveLoc);
+				if(finished)
+					return null;
+
+				receivePacket = client.Receive(ref receiveLoc);
 		
-		if(!checkError(receivePacket))
-			return null;
+				if(!checkError(receivePacket))
+					return null;
+			}
+			catch(SocketException e)
+			{
+				
+			}
+		}
 		return receivePacket;
 	}
 
